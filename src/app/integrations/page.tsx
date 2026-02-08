@@ -18,7 +18,8 @@ type Provider = {
 }
 
 const providers: Provider[] = [
-  { id: 'anthropic', name: 'Anthropic', models: 'Claude Sonnet 4.5, Opus, Haiku', color: '#d4a27f', keyName: 'anthropic_key', icon: 'A' },
+  { id: 'moonshot', name: 'Moonshot (Kimi)', models: 'Kimi K2.5, Kimi Coding — 6x cheaper than Claude', color: '#6c5ce7', keyName: 'moonshot_key', icon: 'K' },
+  { id: 'anthropic', name: 'Anthropic', models: 'Claude Sonnet 4.5, Opus 4.6, Haiku', color: '#d4a27f', keyName: 'anthropic_key', icon: 'A' },
   { id: 'openai', name: 'OpenAI', models: 'GPT-4o, o1, o3-mini', color: '#10a37f', keyName: 'openai_key', icon: 'O' },
   { id: 'deepseek', name: 'DeepSeek', models: 'DeepSeek-V3, R1', color: '#4a6cf7', keyName: 'deepseek_key', icon: 'D' },
   { id: 'google', name: 'Google AI', models: 'Gemini 2.0, Flash', color: '#4285f4', keyName: 'google_key', icon: 'G' },

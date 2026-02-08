@@ -6,8 +6,9 @@ export function seedDatabase(db: Database.Database) {
     'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)'
   )
   const settings: [string, string][] = [
-    ['primary_model', 'claude-sonnet-4-5'],
-    ['fallback_model', 'gpt-4o'],
+    ['primary_model', 'moonshot/kimi-k2.5'],
+    ['fallback_model', 'claude-sonnet-4-5'],
+    ['moonshot_key', ''],
     ['anthropic_key', ''],
     ['openai_key', ''],
     ['deepseek_key', ''],
