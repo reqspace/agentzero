@@ -61,8 +61,8 @@ app.prepare().then(() => {
   io.on('connection', (socket) => {
     console.log(`[Socket.IO] Client connected: ${socket.id}`)
 
-    // Send initial agent status
-    socket.emit('agent:status', { online: clawClient.connected, uptime: process.uptime() })
+    // Send initial agent status (use authenticated, not just connected)
+    socket.emit('agent:status', { online: clawClient.authenticated, uptime: process.uptime() })
 
     socket.on('subscribe:logs', () => {
       socket.join('logs')
