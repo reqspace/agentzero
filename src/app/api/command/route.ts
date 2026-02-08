@@ -13,8 +13,8 @@ export async function POST(request: Request) {
   ).run(userMsgId, 'user', text, channel, attachments ? JSON.stringify(attachments) : null)
 
   // Forward to OpenClaw gateway
-  const clawClient = (global as Record<string, unknown>).clawClient as { sendCommand: (t: string, c?: string) => void; connected: boolean } | undefined
-  if (clawClient?.connected) {
+  const clawClient = (global as Record<string, unknown>).clawClient as { sendCommand: (t: string, c?: string) => void; authenticated: boolean } | undefined
+  if (clawClient?.authenticated) {
     clawClient.sendCommand(text, channel)
   } else {
     // Simulate agent response when gateway is not connected

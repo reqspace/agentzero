@@ -45,9 +45,22 @@ app.prepare().then(() => {
       case 'task_update':
         io.emit('task:update', data.payload)
         break
-      case 'message':
+      case 'message': {
+        const msg = data.payload as { role: string; content: string; channel?: string }
+        // Persist agent messages to the database so they survive page refreshes
+        if (msg.role === 'agent' && msg.content) {
+          try {
+            const id = require('crypto').randomBytes(8).toString('hex')
+            db.prepare(
+              'INSERT INTO messages (id, role, content, channel) VALUES (?, ?, ?, ?)'
+            ).run(id, 'agent', msg.content, msg.channel || 'home')
+          } catch (err) {
+            console.error('[DB] Failed to save agent message:', err)
+          }
+        }
         io.emit('message', data.payload)
         break
+      }
       case 'status':
         io.emit('agent:status', data.payload)
         break

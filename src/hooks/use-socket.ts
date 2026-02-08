@@ -7,7 +7,10 @@ let globalSocket: Socket | null = null
 
 function getSocket(): Socket {
   if (!globalSocket) {
-    globalSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000', {
+    // In production, connect to same origin (no URL needed).
+    // In dev, fall back to localhost:3000.
+    const url = process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000')
+    globalSocket = io(url, {
       transports: ['websocket', 'polling'],
     })
   }
