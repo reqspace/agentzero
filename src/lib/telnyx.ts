@@ -67,6 +67,19 @@ export async function hangupCall(callControlId: string) {
   return telnyxRequest(`/calls/${callControlId}/actions/hangup`, {})
 }
 
+export async function sendSms(to: string, text: string) {
+  const db = getDb()
+  const from = (db.prepare('SELECT value FROM settings WHERE key = ?').get('telnyx_phone_number') as { value: string } | undefined)?.value
+  if (!from) throw new Error('Telnyx phone number not configured')
+
+  return telnyxRequest('/messages', {
+    from,
+    to,
+    text,
+    type: 'SMS',
+  })
+}
+
 export function isVoiceEnabled(): boolean {
   const db = getDb()
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('telnyx_voice_enabled') as { value: string } | undefined

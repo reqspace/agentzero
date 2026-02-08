@@ -98,13 +98,55 @@ function handleSmsEvent(event: string, payload: TelnyxWebhook['data']['payload']
   io?.emit('message', { role: 'user', content, channel: 'sms' })
   io?.emit('inbox:update', { type: 'sms', contactId: contact.id, from })
 
-  // Forward to OpenClaw
+  // Forward to OpenClaw — if connected, it will auto-reply via server.ts handler
   const clawClient = (global as Record<string, unknown>).clawClient as { sendCommand: (t: string, c?: string) => void; authenticated: boolean } | undefined
   if (clawClient?.authenticated) {
     clawClient.sendCommand(content, 'sms')
+  } else {
+    // OpenClaw not connected — generate direct LLM reply and send via SMS
+    generateSmsReply(text, from, contact.id, db, io).catch(err => {
+      console.error('[SMS] Direct reply failed:', err)
+    })
   }
 
   return NextResponse.json({ ok: true })
+}
+
+async function generateSmsReply(
+  incomingText: string,
+  fromNumber: string,
+  contactId: string,
+  db: ReturnType<typeof getDb>,
+  io: ReturnType<typeof getIo>
+) {
+  const { generateVoiceResponse } = await import('@/lib/llm')
+  const { sendSms } = await import('@/lib/telnyx')
+
+  // Build conversation context from recent SMS history with this contact
+  const recentMessages = db.prepare(
+    "SELECT role, content FROM messages WHERE contact_id = ? AND channel = 'sms' ORDER BY created_at DESC LIMIT 10"
+  ).all(contactId) as { role: string; content: string }[]
+
+  const turns = recentMessages.reverse().map(m => ({
+    role: (m.role === 'user' ? 'caller' : 'agent') as 'caller' | 'agent',
+    content: m.content.replace(/\[SMS from [^\]]+\]\s*/, ''),
+  }))
+
+  const reply = await generateVoiceResponse(turns)
+
+  // Save agent reply to DB
+  const replyId = crypto.randomBytes(8).toString('hex')
+  db.prepare(
+    'INSERT INTO messages (id, role, content, channel, contact_id) VALUES (?, ?, ?, ?, ?)'
+  ).run(replyId, 'agent', reply, 'sms', contactId)
+
+  // Emit via Socket.IO
+  io?.emit('message', { role: 'agent', content: reply, channel: 'sms' })
+  io?.emit('inbox:update', { type: 'sms_reply', contactId })
+
+  // Send via Telnyx
+  await sendSms(fromNumber, reply)
+  console.log(`[SMS] Auto-replied to ${fromNumber}: "${reply.slice(0, 50)}..."`)
 }
 
 // ─── Call Handling ──────────────────────────────────────────────

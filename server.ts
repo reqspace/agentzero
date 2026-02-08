@@ -57,6 +57,30 @@ app.prepare().then(() => {
           } catch (err) {
             console.error('[DB] Failed to save agent message:', err)
           }
+
+          // Auto-reply via SMS if the message is on the sms channel
+          if (msg.channel === 'sms') {
+            try {
+              // Find the most recent inbound SMS contact to reply to
+              const lastSmsMsg = db.prepare(
+                "SELECT contact_id FROM messages WHERE channel = 'sms' AND role = 'user' AND contact_id IS NOT NULL ORDER BY created_at DESC LIMIT 1"
+              ).get() as { contact_id: string } | undefined
+
+              if (lastSmsMsg?.contact_id) {
+                const contact = db.prepare('SELECT phone_number FROM contacts WHERE id = ?').get(lastSmsMsg.contact_id) as { phone_number: string } | undefined
+                if (contact?.phone_number) {
+                  const { sendSms } = require('./src/lib/telnyx')
+                  sendSms(contact.phone_number, msg.content).then(() => {
+                    console.log(`[SMS] Auto-replied to ${contact.phone_number}`)
+                  }).catch((err: Error) => {
+                    console.error('[SMS] Failed to auto-reply:', err.message)
+                  })
+                }
+              }
+            } catch (err) {
+              console.error('[SMS] Auto-reply error:', err)
+            }
+          }
         }
         io.emit('message', data.payload)
         break
