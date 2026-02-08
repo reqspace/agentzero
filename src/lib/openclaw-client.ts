@@ -86,8 +86,7 @@ export class OpenClawClient {
   }
 
   // OpenClaw Protocol v3 handshake — must be called after receiving connect.challenge
-  private sendHandshake(nonce?: string): void {
-    const instanceId = crypto.randomBytes(8).toString('hex')
+  private sendHandshake(): void {
     this.send({
       type: 'req',
       id: this.nextId(),
@@ -95,21 +94,17 @@ export class OpenClawClient {
       params: {
         minProtocol: 3,
         maxProtocol: 3,
-        nonce,
         client: {
-          id: 'agent-zero-dashboard',
+          id: 'openclaw-cli',
           displayName: 'Agent Zero Mission Control',
           version: '0.1.0',
           platform: process.platform,
           mode: 'operator',
-          instanceId,
         },
         role: 'operator',
         scopes: ['operator.read', 'operator.write', 'operator.admin'],
         caps: [],
         auth: this.authToken ? { token: this.authToken } : undefined,
-        locale: 'en-US',
-        userAgent: 'agent-zero-mission-control/0.1.0',
       },
     })
   }
@@ -160,10 +155,9 @@ export class OpenClawClient {
   private handleEvent(event: string, payload: Record<string, unknown>): void {
     switch (event) {
       case 'connect.challenge': {
-        // Server sends challenge with nonce — respond with connect handshake
-        const nonce = payload.nonce as string | undefined
+        // Server sends challenge — respond with connect handshake
         console.log('[OpenClaw] Received connect.challenge, sending handshake...')
-        this.sendHandshake(nonce)
+        this.sendHandshake()
         break
       }
 
