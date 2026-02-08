@@ -275,10 +275,12 @@ export class OpenClawClient {
     this.send({
       type: 'req',
       id: this.nextId(),
-      method: 'agent',
+      method: 'chat.send',
       params: {
         message: text,
         sessionKey: channel || 'main',
+        deliver: false,
+        idempotencyKey: crypto.randomUUID(),
       },
     })
   }
