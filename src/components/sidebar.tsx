@@ -2,8 +2,8 @@
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useEffect, useState, useCallback } from 'react'
 import { useSocket } from '@/hooks/use-socket'
 
 const navItems = [
@@ -82,11 +82,16 @@ const navItems = [
   },
 ]
 
+const QUICK_LIMITS = [5, 10, 25, 50, 100]
+
 export function Sidebar() {
   const pathname = usePathname()
   const { on } = useSocket()
   const [agentOnline, setAgentOnline] = useState(false)
   const [unreadMessages, setUnreadMessages] = useState(0)
+  const [costData, setCostData] = useState({ spend: 0, limit: 25 })
+  const [showCostPanel, setShowCostPanel] = useState(false)
+  const [customLimit, setCustomLimit] = useState('')
 
   useEffect(() => {
     const unsub1 = on('agent:status', (data: unknown) => {
@@ -96,15 +101,56 @@ export function Sidebar() {
     return () => { unsub1() }
   }, [on])
 
-  // Fetch unread count
+  const fetchCosts = useCallback(() => {
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then((settings: { key: string; value: string }[]) => {
+        const spend = parseFloat(settings.find(s => s.key === 'today_spend')?.value || '0')
+        const limit = parseFloat(settings.find(s => s.key === 'daily_cost_limit')?.value || '25')
+        setCostData({ spend, limit })
+      })
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
+    fetchCosts()
     fetch('/api/channels')
       .then(r => r.json())
       .then((channels: { unread_count: number }[]) => {
         setUnreadMessages(channels.reduce((sum: number, c: { unread_count: number }) => sum + c.unread_count, 0))
       })
       .catch(() => {})
-  }, [])
+  }, [fetchCosts])
+
+  // Poll costs every 30s
+  useEffect(() => {
+    const interval = setInterval(fetchCosts, 30000)
+    return () => clearInterval(interval)
+  }, [fetchCosts])
+
+  const setLimit = async (amount: number) => {
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'daily_cost_limit', value: String(amount) }),
+    })
+    setCostData(p => ({ ...p, limit: amount }))
+    setCustomLimit('')
+  }
+
+  const emergencyStop = async () => {
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'daily_cost_limit', value: '0' }),
+    })
+    setCostData(p => ({ ...p, limit: 0 }))
+    setShowCostPanel(false)
+  }
+
+  const spendPercent = costData.limit > 0 ? Math.min((costData.spend / costData.limit) * 100, 100) : 100
+  const isOverBudget = costData.limit > 0 && costData.spend >= costData.limit
+  const isWarning = spendPercent >= 80
 
   return (
     <>
@@ -134,7 +180,6 @@ export function Sidebar() {
                     : 'text-text-3 hover:text-text-2 hover:bg-bg-3'
                   }
                 `}>
-                  {/* Active indicator bar */}
                   {isActive && (
                     <motion.div
                       layoutId="sidebar-indicator"
@@ -142,18 +187,14 @@ export function Sidebar() {
                       transition={{ type: 'spring', stiffness: 350, damping: 30 }}
                     />
                   )}
-                  {/* Active glow */}
                   {isActive && (
                     <div className="absolute inset-0 rounded-xl bg-orange/5 blur-sm" />
                   )}
                   {item.icon}
-                  {/* Badge for messages */}
                   {item.badge && unreadMessages > 0 && (
                     <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-pink rounded-full status-pulse" />
                   )}
                 </div>
-
-                {/* Tooltip */}
                 <div className="
                   absolute left-14 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg
                   bg-bg-3 border border-border-hi text-text-1 text-xs font-medium
@@ -167,10 +208,56 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* Bottom: Agent status */}
+        {/* Cost threshold button */}
+        <div className="mb-2 relative">
+          <button
+            onClick={() => setShowCostPanel(p => !p)}
+            className="relative w-10 h-10 flex items-center justify-center rounded-xl hover:bg-bg-3 transition-colors group cursor-pointer"
+            title={`$${costData.spend.toFixed(2)} / $${costData.limit.toFixed(2)}`}
+          >
+            {/* Circular progress ring */}
+            <svg width="28" height="28" viewBox="0 0 28 28" className="absolute">
+              <circle
+                cx="14" cy="14" r="11"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="text-bg-4"
+              />
+              <circle
+                cx="14" cy="14" r="11"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeDasharray={`${spendPercent * 0.691} 69.1`}
+                strokeDashoffset="17.3"
+                strokeLinecap="round"
+                className={`
+                  transition-all duration-500
+                  ${isOverBudget ? 'text-error' : isWarning ? 'text-warn' : 'text-teal'}
+                `}
+              />
+            </svg>
+            <span className={`text-[9px] font-bold ${isOverBudget ? 'text-error' : 'text-text-2'}`}>
+              ${costData.spend.toFixed(0)}
+            </span>
+          </button>
+
+          {/* Cost tooltip */}
+          <div className="
+            absolute left-14 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg
+            bg-bg-3 border border-border-hi text-text-1 text-xs font-medium
+            opacity-0 group-hover:opacity-100 transition-opacity duration-150
+            pointer-events-none whitespace-nowrap z-[60]
+          ">
+            ${costData.spend.toFixed(2)} / ${costData.limit.toFixed(2)}
+          </div>
+        </div>
+
+        {/* Agent status */}
         <div className="mb-4 flex flex-col items-center gap-3">
           <button
-            className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-bg-3 transition-colors"
+            className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-bg-3 transition-colors cursor-pointer"
             title={agentOnline ? 'Agent Online — Click to stop' : 'Agent Offline — Click to start'}
           >
             <div className={`
@@ -180,6 +267,112 @@ export function Sidebar() {
           </button>
         </div>
       </aside>
+
+      {/* Cost Control Panel (flyout) */}
+      <AnimatePresence>
+        {showCostPanel && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[55]"
+              onClick={() => setShowCostPanel(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, x: -10, scale: 0.95 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: -10, scale: 0.95 }}
+              className="fixed left-[76px] bottom-[80px] w-[280px] bg-bg-2 border border-border rounded-2xl p-4 z-[60] shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-text-1">Cost Guard</h3>
+                {isOverBudget && (
+                  <span className="text-[10px] font-bold text-error bg-error/10 px-2 py-0.5 rounded-full">
+                    LIMIT HIT
+                  </span>
+                )}
+              </div>
+
+              {/* Current spend */}
+              <div className="mb-3">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-text-3">Today</span>
+                  <span className={isOverBudget ? 'text-error font-bold' : 'text-text-2'}>
+                    ${costData.spend.toFixed(2)} / ${costData.limit.toFixed(2)}
+                  </span>
+                </div>
+                <div className="h-2 bg-bg-4 rounded-full overflow-hidden">
+                  <motion.div
+                    className={`h-full rounded-full ${
+                      isOverBudget ? 'bg-error' : isWarning ? 'bg-warn' : 'bg-gradient-to-r from-teal to-teal'
+                    }`}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${spendPercent}%` }}
+                    transition={{ duration: 0.4 }}
+                  />
+                </div>
+              </div>
+
+              {/* Quick limit buttons */}
+              <p className="text-[10px] text-text-3 uppercase tracking-wider mb-2">Set daily limit</p>
+              <div className="grid grid-cols-5 gap-1.5 mb-3">
+                {QUICK_LIMITS.map(amount => (
+                  <button
+                    key={amount}
+                    onClick={() => setLimit(amount)}
+                    className={`
+                      py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer
+                      ${costData.limit === amount
+                        ? 'gradient-btn text-white'
+                        : 'bg-bg-4 text-text-2 hover:bg-bg-3 hover:text-text-1'
+                      }
+                    `}
+                  >
+                    ${amount}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom limit */}
+              <div className="flex gap-1.5 mb-3">
+                <div className="flex-1 flex items-center bg-bg-4 border border-border rounded-lg px-2">
+                  <span className="text-text-3 text-xs">$</span>
+                  <input
+                    type="number"
+                    value={customLimit}
+                    onChange={e => setCustomLimit(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && customLimit) setLimit(parseFloat(customLimit))
+                    }}
+                    placeholder="Custom"
+                    className="flex-1 bg-transparent text-xs text-text-1 outline-none py-1.5 pl-1 w-0"
+                  />
+                </div>
+                <button
+                  onClick={() => { if (customLimit) setLimit(parseFloat(customLimit)) }}
+                  disabled={!customLimit}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-bg-4 text-text-2 hover:bg-bg-3 disabled:opacity-40 cursor-pointer"
+                >
+                  Set
+                </button>
+              </div>
+
+              {/* Emergency stop */}
+              <button
+                onClick={emergencyStop}
+                className="w-full py-2 rounded-xl text-xs font-semibold bg-error/10 text-error border border-error/20 hover:bg-error/20 transition-all cursor-pointer"
+              >
+                Emergency Stop — Block All Spending
+              </button>
+
+              <p className="text-[10px] text-text-3 mt-2 text-center">
+                Agent is blocked when limit is reached
+              </p>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Mobile bottom tab bar */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-bg-1 border-t border-border z-50 flex items-center justify-around px-2">
