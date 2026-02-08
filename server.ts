@@ -58,24 +58,29 @@ app.prepare().then(() => {
             console.error('[DB] Failed to save agent message:', err)
           }
 
-          // Auto-reply via SMS if the message is on the sms channel
-          if (msg.channel === 'sms') {
+          // Auto-reply via SMS if there's a pending SMS waiting for a response
+          if (pendingSmsReplies.size > 0) {
             try {
-              // Find the most recent inbound SMS contact to reply to
-              const lastSmsMsg = db.prepare(
-                "SELECT contact_id FROM messages WHERE channel = 'sms' AND role = 'user' AND contact_id IS NOT NULL ORDER BY created_at DESC LIMIT 1"
-              ).get() as { contact_id: string } | undefined
-
-              if (lastSmsMsg?.contact_id) {
-                const contact = db.prepare('SELECT phone_number FROM contacts WHERE id = ?').get(lastSmsMsg.contact_id) as { phone_number: string } | undefined
-                if (contact?.phone_number) {
-                  const { sendSms } = require('./src/lib/telnyx')
-                  sendSms(contact.phone_number, msg.content).then(() => {
-                    console.log(`[SMS] Auto-replied to ${contact.phone_number}`)
-                  }).catch((err: Error) => {
-                    console.error('[SMS] Failed to auto-reply:', err.message)
-                  })
-                }
+              // Get the oldest pending SMS reply
+              const [key, pending] = pendingSmsReplies.entries().next().value as [string, { phoneNumber: string; contactId: string; timestamp: number }]
+              // Only reply if the pending SMS is less than 5 minutes old
+              if (Date.now() - pending.timestamp < 5 * 60 * 1000) {
+                console.log(`[SMS] Agent responded, auto-replying to ${pending.phoneNumber}`)
+                pendingSmsReplies.delete(key)
+                const { sendSms } = require('./src/lib/telnyx')
+                // Save as SMS channel message
+                const smsReplyId = require('crypto').randomBytes(8).toString('hex')
+                db.prepare(
+                  'INSERT INTO messages (id, role, content, channel, contact_id) VALUES (?, ?, ?, ?, ?)'
+                ).run(smsReplyId, 'agent', msg.content, 'sms', pending.contactId)
+                sendSms(pending.phoneNumber, msg.content).then(() => {
+                  console.log(`[SMS] Auto-replied to ${pending.phoneNumber}: "${msg.content.slice(0, 50)}..."`)
+                }).catch((err: Error) => {
+                  console.error('[SMS] Failed to auto-reply:', err.message)
+                })
+              } else {
+                console.log(`[SMS] Pending reply expired for ${pending.phoneNumber}`)
+                pendingSmsReplies.delete(key)
               }
             } catch (err) {
               console.error('[SMS] Auto-reply error:', err)
@@ -90,6 +95,10 @@ app.prepare().then(() => {
         break
     }
   })
+
+  // Pending SMS replies: tracks phone numbers waiting for agent responses
+  const pendingSmsReplies = new Map<string, { phoneNumber: string; contactId: string; timestamp: number }>()
+  ;(global as Record<string, unknown>).pendingSmsReplies = pendingSmsReplies
 
   // Active voice call sessions: maps call_control_id -> conversation context
   const activeCalls = new Map<string, {
