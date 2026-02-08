@@ -52,7 +52,7 @@ export class OpenClawClient {
         this.reconnectDelay = 1000
         this.reconnectAttempts = 0
         console.log(`[OpenClaw] Connected to gateway: ${this.gatewayUrl}`)
-        this.sendHandshake()
+        // Don't send handshake here — wait for connect.challenge event
       })
 
       this.ws.on('close', () => {
@@ -85,8 +85,8 @@ export class OpenClawClient {
     }
   }
 
-  // OpenClaw Protocol v3 handshake
-  private sendHandshake(): void {
+  // OpenClaw Protocol v3 handshake — must be called after receiving connect.challenge
+  private sendHandshake(nonce?: string): void {
     const instanceId = crypto.randomBytes(8).toString('hex')
     this.send({
       type: 'req',
@@ -95,6 +95,7 @@ export class OpenClawClient {
       params: {
         minProtocol: 3,
         maxProtocol: 3,
+        nonce,
         client: {
           id: 'agent-zero-dashboard',
           displayName: 'Agent Zero Mission Control',
@@ -121,8 +122,8 @@ export class OpenClawClient {
     payload?: Record<string, unknown>
     error?: { code: string; message: string }
   }): void {
-    // Handle hello-ok (successful handshake)
-    if (msg.type === 'res' && msg.payload?.type === 'hello-ok') {
+    // Handle successful connect response
+    if (msg.type === 'res' && msg.ok === true && !this.authenticated) {
       this.authenticated = true
       console.log('[OpenClaw] Authenticated with gateway (protocol v3)')
       this.handlers.forEach(h => h({ type: 'status', payload: { online: true } }))
@@ -158,6 +159,14 @@ export class OpenClawClient {
 
   private handleEvent(event: string, payload: Record<string, unknown>): void {
     switch (event) {
+      case 'connect.challenge': {
+        // Server sends challenge with nonce — respond with connect handshake
+        const nonce = payload.nonce as string | undefined
+        console.log('[OpenClaw] Received connect.challenge, sending handshake...')
+        this.sendHandshake(nonce)
+        break
+      }
+
       case 'agent': {
         // Streamed agent output
         const agentPayload = payload as { runId?: string; type?: string; output?: string; content?: string }
