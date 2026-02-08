@@ -101,7 +101,7 @@ function handleSmsEvent(event: string, payload: TelnyxWebhook['data']['payload']
   // Forward to OpenClaw — if connected, it will auto-reply via server.ts handler
   const clawClient = (global as Record<string, unknown>).clawClient as { sendCommand: (t: string, c?: string) => void; authenticated: boolean } | undefined
   if (clawClient?.authenticated) {
-    clawClient.sendCommand(content, 'sms')
+    clawClient.sendCommand(content, 'main')
   } else {
     // OpenClaw not connected — generate direct LLM reply and send via SMS
     generateSmsReply(text, from, contact.id, db, io).catch(err => {
