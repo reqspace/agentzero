@@ -135,7 +135,7 @@ export default function HomePage() {
               transition={{ duration: 0.5 }}
               className="flex flex-col items-center justify-center min-h-[60vh] text-center"
             >
-              <div className="text-6xl mb-6">🦞</div>
+              <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-4xl font-bold text-white mx-auto" style={{ background: 'linear-gradient(135deg, #00ddb3, #0088cc)' }}>Z</div>
               <h1 className="text-4xl font-bold gradient-text mb-3">
                 What should I work on?
               </h1>
@@ -168,8 +168,8 @@ export default function HomePage() {
                     className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     {msg.role === 'agent' && (
-                      <div className="w-8 h-8 rounded-lg gradient-btn flex items-center justify-center text-sm shrink-0 mt-1">
-                        🦞
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0 mt-1" style={{ background: 'linear-gradient(135deg, #00ddb3, #0088cc)' }}>
+                        Z
                       </div>
                     )}
                     <div

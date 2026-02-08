@@ -158,8 +158,8 @@ export function Sidebar() {
       <aside className="hidden md:flex flex-col items-center w-[68px] h-screen bg-bg-1 border-r border-border fixed left-0 top-0 z-50">
         {/* Logo */}
         <Link href="/" className="mt-4 mb-6">
-          <div className="w-[42px] h-[42px] rounded-xl flex items-center justify-center text-xl gradient-btn">
-            🦞
+          <div className="w-[42px] h-[42px] rounded-xl flex items-center justify-center text-xl font-bold text-white" style={{ background: 'linear-gradient(135deg, #00ddb3, #0088cc)' }}>
+            Z
           </div>
         </Link>
 
