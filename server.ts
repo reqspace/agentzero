@@ -1,0 +1,101 @@
+import { createServer } from 'http'
+import next from 'next'
+import { Server as SocketServer } from 'socket.io'
+import { getDb } from './src/lib/db'
+import { OpenClawClient } from './src/lib/openclaw-client'
+
+const dev = process.env.NODE_ENV !== 'production'
+const hostname = '0.0.0.0'
+const port = parseInt(process.env.PORT || '3000', 10)
+
+const app = next({ dev, hostname, port })
+const handle = app.getRequestHandler()
+
+app.prepare().then(() => {
+  const server = createServer((req, res) => {
+    handle(req, res)
+  })
+
+  const io = new SocketServer(server, {
+    cors: { origin: '*', methods: ['GET', 'POST'] },
+    transports: ['websocket', 'polling'],
+  })
+
+  // Make io globally accessible for API routes
+  ;(global as Record<string, unknown>).io = io
+
+  // Initialize database
+  const db = getDb()
+  ;(global as Record<string, unknown>).db = db
+
+  // Connect to OpenClaw gateway
+  const gatewayUrl = (db.prepare('SELECT value FROM settings WHERE key = ?').get('gateway_address') as { value: string })?.value || 'ws://127.0.0.1:18789'
+  const clawClient = new OpenClawClient(gatewayUrl)
+  ;(global as Record<string, unknown>).clawClient = clawClient
+
+  clawClient.onMessage((data) => {
+    switch (data.type) {
+      case 'log':
+        io.emit('log', data.payload)
+        break
+      case 'task_update':
+        io.emit('task:update', data.payload)
+        break
+      case 'message':
+        io.emit('message', data.payload)
+        break
+      case 'status':
+        io.emit('agent:status', data.payload)
+        break
+    }
+  })
+
+  // Attempt gateway connection (won't crash if unavailable)
+  clawClient.connect()
+
+  // Socket.IO connection handling
+  io.on('connection', (socket) => {
+    console.log(`[Socket.IO] Client connected: ${socket.id}`)
+
+    // Send initial agent status
+    socket.emit('agent:status', { online: clawClient.connected, uptime: process.uptime() })
+
+    socket.on('subscribe:logs', () => {
+      socket.join('logs')
+    })
+
+    socket.on('subscribe:activity', () => {
+      socket.join('activity')
+    })
+
+    socket.on('command', (data: { text: string; channel?: string }) => {
+      clawClient.sendCommand(data.text, data.channel)
+    })
+
+    socket.on('task:move', (data: { taskId: string; newStatus: string; order: number }) => {
+      try {
+        db.prepare('UPDATE tasks SET status = ?, column_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(data.newStatus, data.order, data.taskId)
+        io.emit('task:update', { taskId: data.taskId, status: data.newStatus })
+      } catch (err) {
+        console.error('[Socket.IO] task:move error:', err)
+      }
+    })
+
+    socket.on('disconnect', () => {
+      console.log(`[Socket.IO] Client disconnected: ${socket.id}`)
+    })
+  })
+
+  server.listen(port, () => {
+    console.log(`
+  ╔══════════════════════════════════════════╗
+  ║       Agent Zero Mission Control         ║
+  ║                                          ║
+  ║  → http://localhost:${port}                 ║
+  ║  → Socket.IO ready                       ║
+  ║  → SQLite initialized                    ║
+  ╚══════════════════════════════════════════╝
+    `)
+  })
+})
