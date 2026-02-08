@@ -22,7 +22,7 @@ export function seedDatabase(db: Database.Database) {
     ['sleep_end', '07:00'],
     ['wake_on_urgent', 'true'],
     ['max_overnight_spend', '5.00'],
-    ['gateway_address', 'ws://127.0.0.1:18789'],
+    ['gateway_address', 'wss://openclaw-production-281e.up.railway.app'],
     ['lane_mode', 'serial'],
     ['sandbox_mode', 'true'],
     ['require_confirmation', 'true'],
