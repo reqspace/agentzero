@@ -107,7 +107,7 @@ export class OpenClawClient {
         role: 'operator',
         scopes: ['operator.read', 'operator.write', 'operator.admin'],
         caps: [],
-        auth: { token: this.authToken },
+        auth: this.authToken ? { token: this.authToken } : undefined,
         locale: 'en-US',
         userAgent: 'agent-zero-mission-control/0.1.0',
       },
