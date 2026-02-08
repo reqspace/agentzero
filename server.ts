@@ -28,9 +28,13 @@ app.prepare().then(() => {
   const db = getDb()
   ;(global as Record<string, unknown>).db = db
 
-  // Connect to OpenClaw gateway
+  // Connect to OpenClaw gateway with cost guard
   const gatewayUrl = (db.prepare('SELECT value FROM settings WHERE key = ?').get('gateway_address') as { value: string })?.value || 'ws://127.0.0.1:18789'
-  const clawClient = new OpenClawClient(gatewayUrl)
+  const dailyLimit = parseFloat((db.prepare('SELECT value FROM settings WHERE key = ?').get('daily_cost_limit') as { value: string })?.value || '25')
+  const clawClient = new OpenClawClient(gatewayUrl, {
+    token: process.env.OPENCLAW_GATEWAY_TOKEN,
+    dailyLimit,
+  })
   ;(global as Record<string, unknown>).clawClient = clawClient
 
   clawClient.onMessage((data) => {
