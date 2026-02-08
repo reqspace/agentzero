@@ -75,6 +75,11 @@ export class OpenClawClient {
       this.ws.on('message', (raw) => {
         try {
           const msg = JSON.parse(raw.toString())
+          // Log all non-tick messages for debugging
+          if (msg.event !== 'tick') {
+            const preview = JSON.stringify(msg).slice(0, 200)
+            console.log(`[OpenClaw] ← ${preview}`)
+          }
           this.handleProtocolMessage(msg)
         } catch {
           // ignore parse errors
@@ -270,11 +275,19 @@ export class OpenClawClient {
       return
     }
 
-    if (!this.authenticated || this.ws?.readyState !== WebSocket.OPEN) return
+    if (!this.authenticated) {
+      console.warn(`[OpenClaw] sendCommand dropped — not authenticated. text="${text.slice(0, 60)}"`)
+      return
+    }
+    if (this.ws?.readyState !== WebSocket.OPEN) {
+      console.warn(`[OpenClaw] sendCommand dropped — ws not open (state=${this.ws?.readyState}). text="${text.slice(0, 60)}"`)
+      return
+    }
 
-    this.send({
+    const reqId = this.nextId()
+    const payload = {
       type: 'req',
-      id: this.nextId(),
+      id: reqId,
       method: 'chat.send',
       params: {
         message: text,
@@ -282,7 +295,15 @@ export class OpenClawClient {
         deliver: false,
         idempotencyKey: crypto.randomUUID(),
       },
-    })
+    }
+
+    try {
+      console.log(`[OpenClaw] sendCommand id=${reqId} sessionKey="${channel || 'main'}" text="${text.slice(0, 80)}"`)
+      this.send(payload)
+      console.log(`[OpenClaw] sendCommand id=${reqId} sent OK`)
+    } catch (err) {
+      console.error(`[OpenClaw] sendCommand id=${reqId} FAILED:`, err)
+    }
   }
 
   sendHealthCheck(): void {
@@ -299,7 +320,13 @@ export class OpenClawClient {
 
   private send(data: unknown): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(data))
+      try {
+        this.ws.send(JSON.stringify(data))
+      } catch (err) {
+        console.error('[OpenClaw] ws.send() threw:', err)
+      }
+    } else {
+      console.warn(`[OpenClaw] send() dropped — ws not open (state=${this.ws?.readyState})`)
     }
   }
 
