@@ -95,11 +95,11 @@ export class OpenClawClient {
         minProtocol: 3,
         maxProtocol: 3,
         client: {
-          id: 'openclaw-cli',
+          id: 'gateway-client',
           displayName: 'Agent Zero Mission Control',
           version: '0.1.0',
           platform: process.platform,
-          mode: 'operator',
+          mode: 'backend',
         },
         role: 'operator',
         scopes: ['operator.read', 'operator.write', 'operator.admin'],
