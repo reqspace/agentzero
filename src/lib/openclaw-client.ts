@@ -167,14 +167,16 @@ export class OpenClawClient {
       }
 
       case 'agent': {
-        // Streamed agent output
-        const agentPayload = payload as { runId?: string; type?: string; output?: string; content?: string }
-        if (agentPayload.type === 'text' || agentPayload.output || agentPayload.content) {
+        // Streamed agent output — accept any event that has text content
+        const agentPayload = payload as { runId?: string; type?: string; output?: string; content?: string; text?: string; delta?: string }
+        const textContent = agentPayload.output || agentPayload.content || agentPayload.text || agentPayload.delta || ''
+        console.log(`[OpenClaw] agent event: type=${agentPayload.type} runId=${agentPayload.runId} hasContent=${!!textContent} len=${textContent.length}`)
+        if (textContent) {
           this.handlers.forEach(h => h({
             type: 'message',
             payload: {
               role: 'agent',
-              content: agentPayload.output || agentPayload.content || '',
+              content: textContent,
               channel: 'home',
             },
           }))
