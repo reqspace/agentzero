@@ -40,6 +40,17 @@ const navItems = [
     badge: true,
   },
   {
+    href: '/inbox',
+    label: 'Inbox',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 5C3 3.9 3.9 3 5 3H6.5L8.5 7L7 8C7.8 9.9 8.1 10.2 10 11L11 9.5L15 11.5V13C15 14.1 14.1 15 13 15C7 15 3 11 3 5Z" />
+        <circle cx="15" cy="4" r="2.5" fill="#ff3d8b" stroke="none" />
+      </svg>
+    ),
+    badge: true,
+  },
+  {
     href: '/integrations',
     label: 'Integrations',
     icon: (
@@ -89,6 +100,7 @@ export function Sidebar() {
   const { on } = useSocket()
   const [agentOnline, setAgentOnline] = useState(false)
   const [unreadMessages, setUnreadMessages] = useState(0)
+  const [unreadInbox, setUnreadInbox] = useState(0)
   const [costData, setCostData] = useState({ spend: 0, limit: 25 })
   const [showCostPanel, setShowCostPanel] = useState(false)
   const [customLimit, setCustomLimit] = useState('')
@@ -118,6 +130,12 @@ export function Sidebar() {
       .then(r => r.json())
       .then((channels: { unread_count: number }[]) => {
         setUnreadMessages(channels.reduce((sum: number, c: { unread_count: number }) => sum + c.unread_count, 0))
+      })
+      .catch(() => {})
+    fetch('/api/inbox')
+      .then(r => r.json())
+      .then((contacts: { unread_count: number }[]) => {
+        setUnreadInbox(contacts.reduce((sum: number, c: { unread_count: number }) => sum + c.unread_count, 0))
       })
       .catch(() => {})
   }, [fetchCosts])
@@ -191,7 +209,7 @@ export function Sidebar() {
                     <div className="absolute inset-0 rounded-xl bg-orange/5 blur-sm" />
                   )}
                   {item.icon}
-                  {item.badge && unreadMessages > 0 && (
+                  {item.badge && ((item.href === '/inbox' ? unreadInbox : unreadMessages) > 0) && (
                     <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-pink rounded-full status-pulse" />
                   )}
                 </div>
@@ -394,7 +412,7 @@ export function Sidebar() {
                   className="absolute -bottom-1 w-4 h-[2px] bg-orange rounded-full"
                 />
               )}
-              {item.badge && unreadMessages > 0 && (
+              {item.badge && ((item.href === '/inbox' ? unreadInbox : unreadMessages) > 0) && (
                 <span className="absolute top-1 right-0.5 w-2 h-2 bg-pink rounded-full" />
               )}
             </Link>

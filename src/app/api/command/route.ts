@@ -4,13 +4,18 @@ import crypto from 'crypto'
 
 export async function POST(request: Request) {
   const db = getDb()
-  const { text, attachments, channel = 'home' } = await request.json()
+  const { text, attachments, channel = 'home', conversation_id } = await request.json()
 
   // Store user message
   const userMsgId = crypto.randomBytes(8).toString('hex')
   db.prepare(
-    'INSERT INTO messages (id, role, content, channel, attachments) VALUES (?, ?, ?, ?, ?)'
-  ).run(userMsgId, 'user', text, channel, attachments ? JSON.stringify(attachments) : null)
+    'INSERT INTO messages (id, role, content, channel, attachments, conversation_id) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(userMsgId, 'user', text, channel, attachments ? JSON.stringify(attachments) : null, conversation_id || null)
+
+  // Update conversation timestamp if provided
+  if (conversation_id) {
+    db.prepare('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(conversation_id)
+  }
 
   // Forward to OpenClaw gateway
   const clawClient = (global as Record<string, unknown>).clawClient as { sendCommand: (t: string, c?: string) => void; authenticated: boolean } | undefined
@@ -21,12 +26,12 @@ export async function POST(request: Request) {
     const agentMsgId = crypto.randomBytes(8).toString('hex')
     const response = generateSimulatedResponse(text)
     db.prepare(
-      'INSERT INTO messages (id, role, content, channel) VALUES (?, ?, ?, ?)'
-    ).run(agentMsgId, 'agent', response, channel)
+      'INSERT INTO messages (id, role, content, channel, conversation_id) VALUES (?, ?, ?, ?, ?)'
+    ).run(agentMsgId, 'agent', response, channel, conversation_id || null)
 
     // Emit via Socket.IO
     const io = (global as Record<string, unknown>).io as { emit: (e: string, d: unknown) => void } | undefined
-    io?.emit('message', { role: 'agent', content: response, channel })
+    io?.emit('message', { role: 'agent', content: response, channel, conversation_id })
   }
 
   return NextResponse.json({ ok: true })

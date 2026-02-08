@@ -19,6 +19,7 @@ export function getDb(): Database.Database {
   _db.pragma('foreign_keys = ON')
 
   initSchema(_db)
+  migrateSchema(_db)
   if (isNew) seedDatabase(_db)
 
   return _db
@@ -112,7 +113,63 @@ function initSchema(db: Database.Database) {
       keys TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS contacts (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      phone_number TEXT UNIQUE NOT NULL,
+      display_name TEXT,
+      type TEXT CHECK(type IN ('sms','voice','both')) DEFAULT 'sms',
+      last_interaction_at DATETIME,
+      unread_count INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS conversations (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      title TEXT NOT NULL DEFAULT 'New Conversation',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS call_logs (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      telnyx_call_control_id TEXT UNIQUE,
+      contact_id TEXT REFERENCES contacts(id),
+      caller_number TEXT NOT NULL,
+      callee_number TEXT,
+      direction TEXT CHECK(direction IN ('inbound','outbound')) DEFAULT 'inbound',
+      status TEXT CHECK(status IN (
+        'initiated','ringing','answered','active',
+        'completed','failed','busy','no_answer'
+      )) DEFAULT 'initiated',
+      duration_seconds INTEGER DEFAULT 0,
+      transcript TEXT,
+      summary TEXT,
+      started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      answered_at DATETIME,
+      ended_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS call_transcript_turns (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      call_id TEXT REFERENCES call_logs(id),
+      role TEXT CHECK(role IN ('caller','agent')) NOT NULL,
+      content TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `)
+}
+
+function migrateSchema(db: Database.Database) {
+  // Add columns to messages table (idempotent via try/catch)
+  const migrations = [
+    'ALTER TABLE messages ADD COLUMN conversation_id TEXT REFERENCES conversations(id)',
+    'ALTER TABLE messages ADD COLUMN contact_id TEXT REFERENCES contacts(id)',
+  ]
+  for (const sql of migrations) {
+    try { db.exec(sql) } catch { /* column already exists */ }
+  }
 }
 
 export type Message = {
@@ -121,6 +178,8 @@ export type Message = {
   content: string
   channel: string
   attachments: string | null
+  conversation_id: string | null
+  contact_id: string | null
   created_at: string
 }
 
@@ -183,4 +242,46 @@ export type Setting = {
   value: string
   encrypted: number
   updated_at: string
+}
+
+export type Contact = {
+  id: string
+  phone_number: string
+  display_name: string | null
+  type: 'sms' | 'voice' | 'both'
+  last_interaction_at: string | null
+  unread_count: number
+  created_at: string
+}
+
+export type Conversation = {
+  id: string
+  title: string
+  created_at: string
+  updated_at: string
+}
+
+export type CallLog = {
+  id: string
+  telnyx_call_control_id: string | null
+  contact_id: string | null
+  caller_number: string
+  callee_number: string | null
+  direction: 'inbound' | 'outbound'
+  status: string
+  duration_seconds: number
+  transcript: string | null
+  summary: string | null
+  started_at: string
+  answered_at: string | null
+  ended_at: string | null
+  created_at: string
+}
+
+export type CallTranscriptTurn = {
+  id: string
+  call_id: string
+  role: 'caller' | 'agent'
+  content: string
+  created_at: string
 }

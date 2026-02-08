@@ -195,6 +195,63 @@ export default function SettingsPage() {
     {
       icon: (
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M3 5C3 3.9 3.9 3 5 3H6.5L8.5 7L7 8C7.8 9.9 8.1 10.2 10 11L11 9.5L15 11.5V13C15 14.1 14.1 15 13 15C7 15 3 11 3 5Z" />
+        </svg>
+      ),
+      title: 'Telephony',
+      description: 'Telnyx voice calls and SMS configuration',
+      rows: [
+        {
+          label: 'Telnyx API Key',
+          desc: 'API key from your Telnyx portal',
+          control: (
+            <input
+              type="password"
+              value={get('telnyx_api_key')}
+              onChange={e => updateSetting('telnyx_api_key', e.target.value)}
+              placeholder="KEYxxxxxxxx"
+              className="bg-bg-4 border border-border rounded-lg px-3 py-1 text-xs text-text-1 font-mono outline-none focus:border-border-hi w-56"
+            />
+          ),
+        },
+        {
+          label: 'Phone Number',
+          desc: 'Your Telnyx phone number for receiving calls/SMS',
+          control: (
+            <input
+              value={get('telnyx_phone_number')}
+              onChange={e => updateSetting('telnyx_phone_number', e.target.value)}
+              placeholder="+1XXXXXXXXXX"
+              className="bg-bg-4 border border-border rounded-lg px-3 py-1 text-xs text-text-1 font-mono outline-none focus:border-border-hi w-44"
+            />
+          ),
+        },
+        {
+          label: 'Voice Auto-Answer',
+          desc: 'Agent Zero answers incoming calls with AI',
+          control: (
+            <Switch
+              checked={getBool('telnyx_voice_enabled')}
+              onCheckedChange={() => toggleSetting('telnyx_voice_enabled')}
+            />
+          ),
+        },
+        {
+          label: 'Greeting Message',
+          desc: 'What Agent Zero says when answering a call',
+          control: (
+            <input
+              value={get('telnyx_voice_greeting')}
+              onChange={e => updateSetting('telnyx_voice_greeting', e.target.value)}
+              className="bg-bg-4 border border-border rounded-lg px-3 py-1 text-xs text-text-1 outline-none focus:border-border-hi w-72"
+            />
+          ),
+        },
+      ],
+    },
+    {
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
           <rect x="2" y="3" width="14" height="12" rx="2" />
           <path d="M6 8L8 10L6 12" />
           <path d="M10 12H13" />

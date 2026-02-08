@@ -31,6 +31,10 @@ export function seedDatabase(db: Database.Database) {
     ['telegram_alerts', 'false'],
     ['email_digest', 'false'],
     ['today_spend', '0'],
+    ['telnyx_api_key', ''],
+    ['telnyx_voice_enabled', 'false'],
+    ['telnyx_phone_number', ''],
+    ['telnyx_voice_greeting', 'Hello, you have reached Agent Zero. How can I help you?'],
   ]
   for (const [key, value] of settings) insertSetting.run(key, value)
 

@@ -46,14 +46,14 @@ app.prepare().then(() => {
         io.emit('task:update', data.payload)
         break
       case 'message': {
-        const msg = data.payload as { role: string; content: string; channel?: string }
+        const msg = data.payload as { role: string; content: string; channel?: string; conversation_id?: string }
         // Persist agent messages to the database so they survive page refreshes
         if (msg.role === 'agent' && msg.content) {
           try {
             const id = require('crypto').randomBytes(8).toString('hex')
             db.prepare(
-              'INSERT INTO messages (id, role, content, channel) VALUES (?, ?, ?, ?)'
-            ).run(id, 'agent', msg.content, msg.channel || 'home')
+              'INSERT INTO messages (id, role, content, channel, conversation_id) VALUES (?, ?, ?, ?, ?)'
+            ).run(id, 'agent', msg.content, msg.channel || 'home', msg.conversation_id || null)
           } catch (err) {
             console.error('[DB] Failed to save agent message:', err)
           }
@@ -66,6 +66,15 @@ app.prepare().then(() => {
         break
     }
   })
+
+  // Active voice call sessions: maps call_control_id -> conversation context
+  const activeCalls = new Map<string, {
+    callLogId: string
+    contactId: string
+    callerNumber: string
+    turns: Array<{ role: 'caller' | 'agent'; content: string }>
+  }>()
+  ;(global as Record<string, unknown>).activeCalls = activeCalls
 
   // Attempt gateway connection (won't crash if unavailable)
   clawClient.connect()
@@ -83,6 +92,14 @@ app.prepare().then(() => {
 
     socket.on('subscribe:activity', () => {
       socket.join('activity')
+    })
+
+    socket.on('subscribe:calls', () => {
+      socket.join('calls')
+    })
+
+    socket.on('subscribe:inbox', () => {
+      socket.join('inbox')
     })
 
     socket.on('command', (data: { text: string; channel?: string }) => {
