@@ -17,10 +17,10 @@ export async function POST(request: Request) {
     db.prepare('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(conversation_id)
   }
 
-  // Forward to OpenClaw gateway
+  // Forward to OpenClaw gateway — use 'main' session key (dashboard 'home' channel != OpenClaw session)
   const clawClient = (global as Record<string, unknown>).clawClient as { sendCommand: (t: string, c?: string) => void; authenticated: boolean } | undefined
   if (clawClient?.authenticated) {
-    clawClient.sendCommand(text, channel)
+    clawClient.sendCommand(text, 'main')
   } else {
     // Simulate agent response when gateway is not connected
     const agentMsgId = crypto.randomBytes(8).toString('hex')

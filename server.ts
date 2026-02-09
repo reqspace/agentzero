@@ -137,7 +137,7 @@ app.prepare().then(() => {
     })
 
     socket.on('command', (data: { text: string; channel?: string }) => {
-      clawClient.sendCommand(data.text, data.channel)
+      clawClient.sendCommand(data.text, 'main')
     })
 
     socket.on('task:move', (data: { taskId: string; newStatus: string; order: number }) => {
