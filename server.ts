@@ -136,8 +136,31 @@ app.prepare().then(() => {
       socket.join('inbox')
     })
 
-    socket.on('command', (data: { text: string; channel?: string }) => {
-      clawClient.sendCommand(data.text, 'main')
+    socket.on('command', (data: { text: string; channel?: string; conversation_id?: string; attachments?: string[] }, ack?: (res: { ok: boolean }) => void) => {
+      const text = data.text?.trim()
+      if (!text) { ack?.({ ok: false }); return }
+
+      // Save user message to DB
+      try {
+        const msgId = require('crypto').randomBytes(8).toString('hex')
+        db.prepare(
+          'INSERT INTO messages (id, role, content, channel, attachments, conversation_id) VALUES (?, ?, ?, ?, ?, ?)'
+        ).run(msgId, 'user', text, 'home', data.attachments ? JSON.stringify(data.attachments) : null, data.conversation_id || null)
+        if (data.conversation_id) {
+          db.prepare('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(data.conversation_id)
+        }
+      } catch (err) {
+        console.error('[Socket.IO] Failed to save user message:', err)
+      }
+
+      // Forward to OpenClaw gateway
+      if (clawClient.authenticated) {
+        clawClient.sendCommand(text, 'main')
+        console.log(`[Socket.IO] Forwarded to OpenClaw: "${text.slice(0, 80)}"`)
+      } else {
+        console.warn(`[Socket.IO] OpenClaw not authenticated, message not forwarded: "${text.slice(0, 60)}"`)
+      }
+      ack?.({ ok: true })
     })
 
     socket.on('task:move', (data: { taskId: string; newStatus: string; order: number }) => {

@@ -52,7 +52,7 @@ export default function HomePage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const { on } = useSocket()
+  const { on, emit } = useSocket()
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -143,15 +143,9 @@ export default function HomePage() {
       setFiles([])
     }
 
-    try {
-      await fetch('/api/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: content, attachments, conversation_id: convId }),
-      })
-      mutate(messagesUrl)
-      mutate('/api/conversations')
-    } catch {}
+    emit('command', { text: content, attachments, conversation_id: convId })
+    mutate(messagesUrl)
+    mutate('/api/conversations')
     setSending(false)
   }
 
