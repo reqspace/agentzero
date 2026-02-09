@@ -33,7 +33,7 @@ app.prepare().then(() => {
   console.log(`[Config] TELNYX_PHONE_NUMBER: ${process.env.TELNYX_PHONE_NUMBER || 'NOT SET'}`)
 
   // Connect to OpenClaw gateway with cost guard
-  const gatewayUrl = process.env.OPENCLAW_GATEWAY_URL || (db.prepare('SELECT value FROM settings WHERE key = ?').get('gateway_address') as { value: string })?.value || 'wss://openclaw-production-281e.up.railway.app'
+  const gatewayUrl = process.env.OPENCLAW_GATEWAY_URL || (db.prepare('SELECT value FROM settings WHERE key = ?').get('gateway_address') as { value: string })?.value || 'wss://openclaw.reqspace.cloud'
   const dailyLimit = parseFloat((db.prepare('SELECT value FROM settings WHERE key = ?').get('daily_cost_limit') as { value: string })?.value || '25')
   const clawClient = new OpenClawClient(gatewayUrl, {
     token: process.env.OPENCLAW_GATEWAY_TOKEN,

@@ -170,6 +170,11 @@ function migrateSchema(db: Database.Database) {
   for (const sql of migrations) {
     try { db.exec(sql) } catch { /* column already exists */ }
   }
+
+  // Fix stale gateway address from old Railway deployment
+  db.prepare(
+    `UPDATE settings SET value = 'wss://openclaw.reqspace.cloud' WHERE key = 'gateway_address' AND value = 'wss://openclaw-production-281e.up.railway.app'`
+  ).run()
 }
 
 export type Message = {
