@@ -72,7 +72,7 @@ export async function hangupCall(callControlId: string) {
 export async function sendSms(to: string, text: string) {
   const db = getDb()
   const from = process.env.TELNYX_PHONE_NUMBER || (db.prepare('SELECT value FROM settings WHERE key = ?').get('telnyx_phone_number') as { value: string } | undefined)?.value
-  if (!from) throw new Error('Telnyx phone number not configured')
+  if (!from) throw new Error('Telnyx phone number not configured. Set TELNYX_PHONE_NUMBER env var on Railway (e.g. +15122546553)')
 
   return telnyxRequest('/messages', {
     from,
