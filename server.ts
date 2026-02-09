@@ -46,9 +46,9 @@ app.prepare().then(() => {
         io.emit('task:update', data.payload)
         break
       case 'message': {
-        const msg = data.payload as { role: string; content: string; channel?: string; conversation_id?: string }
-        // Persist agent messages to the database so they survive page refreshes
-        if (msg.role === 'agent' && msg.content) {
+        const msg = data.payload as { role: string; content: string; channel?: string; conversation_id?: string; streaming?: boolean }
+        // Persist non-streaming agent messages to the database
+        if (msg.role === 'agent' && msg.content && !msg.streaming) {
           try {
             const id = require('crypto').randomBytes(8).toString('hex')
             db.prepare(
@@ -58,49 +58,28 @@ app.prepare().then(() => {
             console.error('[DB] Failed to save agent message:', err)
           }
 
-          // Auto-reply via SMS: buffer streamed chunks and send after 3s idle
-          if (pendingSmsReplies.size > 0 || smsBufferTarget) {
-            // Claim the pending target on first chunk
-            if (!smsBufferTarget && pendingSmsReplies.size > 0) {
-              const [key, pending] = pendingSmsReplies.entries().next().value as [string, { phoneNumber: string; contactId: string; timestamp: number }]
-              if (Date.now() - pending.timestamp < 5 * 60 * 1000) {
-                smsBufferTarget = { phoneNumber: pending.phoneNumber, contactId: pending.contactId }
-                pendingSmsReplies.delete(key)
-                console.log(`[SMS] Buffering agent response for ${smsBufferTarget.phoneNumber}...`)
-              } else {
-                pendingSmsReplies.delete(key)
+          // Auto-reply via SMS if there's a pending reply (only on complete/final messages)
+          if (pendingSmsReplies.size > 0) {
+            const [key, pending] = pendingSmsReplies.entries().next().value as [string, { phoneNumber: string; contactId: string; timestamp: number }]
+            if (Date.now() - pending.timestamp < 5 * 60 * 1000) {
+              pendingSmsReplies.delete(key)
+              console.log(`[SMS] Got complete agent response (${msg.content.length} chars), sending to ${pending.phoneNumber}`)
+              try {
+                const smsReplyId = require('crypto').randomBytes(8).toString('hex')
+                db.prepare(
+                  'INSERT INTO messages (id, role, content, channel, contact_id) VALUES (?, ?, ?, ?, ?)'
+                ).run(smsReplyId, 'agent', msg.content, 'sms', pending.contactId)
+                const { sendSms } = require('./src/lib/telnyx')
+                sendSms(pending.phoneNumber, msg.content).then(() => {
+                  console.log(`[SMS] Auto-replied to ${pending.phoneNumber}: "${msg.content.slice(0, 80)}..."`)
+                }).catch((err: Error) => {
+                  console.error('[SMS] Failed to auto-reply:', err.message)
+                })
+              } catch (err) {
+                console.error('[SMS] Auto-reply error:', err)
               }
-            }
-
-            // Append chunk to buffer
-            if (smsBufferTarget) {
-              smsBuffer += msg.content
-              // Reset the flush timer on each chunk (3 second idle = stream done)
-              if (smsBufferTimer) clearTimeout(smsBufferTimer)
-              smsBufferTimer = setTimeout(() => {
-                if (!smsBufferTarget || !smsBuffer) return
-                const fullReply = smsBuffer.trim()
-                const target = smsBufferTarget
-                smsBuffer = ''
-                smsBufferTarget = null
-                smsBufferTimer = null
-                console.log(`[SMS] Stream complete, sending SMS to ${target.phoneNumber} (${fullReply.length} chars)`)
-                try {
-                  // Save as SMS channel message
-                  const smsReplyId = require('crypto').randomBytes(8).toString('hex')
-                  db.prepare(
-                    'INSERT INTO messages (id, role, content, channel, contact_id) VALUES (?, ?, ?, ?, ?)'
-                  ).run(smsReplyId, 'agent', fullReply, 'sms', target.contactId)
-                  const { sendSms } = require('./src/lib/telnyx')
-                  sendSms(target.phoneNumber, fullReply).then(() => {
-                    console.log(`[SMS] Auto-replied to ${target.phoneNumber}: "${fullReply.slice(0, 80)}..."`)
-                  }).catch((err: Error) => {
-                    console.error('[SMS] Failed to auto-reply:', err.message)
-                  })
-                } catch (err) {
-                  console.error('[SMS] Auto-reply error:', err)
-                }
-              }, 3000)
+            } else {
+              pendingSmsReplies.delete(key)
             }
           }
         }
@@ -116,11 +95,6 @@ app.prepare().then(() => {
   // Pending SMS replies: tracks phone numbers waiting for agent responses
   const pendingSmsReplies = new Map<string, { phoneNumber: string; contactId: string; timestamp: number }>()
   ;(global as Record<string, unknown>).pendingSmsReplies = pendingSmsReplies
-
-  // SMS response buffer: accumulates streamed agent chunks before sending as one SMS
-  let smsBuffer = ''
-  let smsBufferTimer: ReturnType<typeof setTimeout> | null = null
-  let smsBufferTarget: { phoneNumber: string; contactId: string } | null = null
 
   // Active voice call sessions: maps call_control_id -> conversation context
   const activeCalls = new Map<string, {

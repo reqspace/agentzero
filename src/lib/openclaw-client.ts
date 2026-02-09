@@ -167,17 +167,18 @@ export class OpenClawClient {
       }
 
       case 'agent': {
-        // Streamed agent output — accept any event that has text content
-        const agentPayload = payload as { runId?: string; type?: string; output?: string; content?: string; text?: string; delta?: string }
-        const textContent = agentPayload.output || agentPayload.content || agentPayload.text || agentPayload.delta || ''
-        console.log(`[OpenClaw] agent event: type=${agentPayload.type} runId=${agentPayload.runId} hasContent=${!!textContent} len=${textContent.length}`)
-        if (textContent) {
+        // Agent event payload: { stream, data: { text }, runId, ... }
+        const data = payload.data as { text?: string; phase?: string } | undefined
+        const stream = payload.stream as string | undefined
+        const textContent = data?.text || ''
+        if (stream === 'assistant' && textContent) {
           this.handlers.forEach(h => h({
             type: 'message',
             payload: {
               role: 'agent',
               content: textContent,
               channel: 'home',
+              streaming: true,
             },
           }))
         }
@@ -185,6 +186,32 @@ export class OpenClawClient {
         const usage = payload.usage as { input_tokens?: number; output_tokens?: number } | undefined
         if (usage) {
           this.trackUsage(usage.input_tokens || 0, usage.output_tokens || 0)
+        }
+        break
+      }
+
+      case 'chat': {
+        // Chat event: { state: 'delta'|'final', message: { role, content: [{type:'text', text:'...'}] }, sessionKey }
+        const state = payload.state as string | undefined
+        const message = payload.message as { role?: string; content?: Array<{ type: string; text?: string }> } | undefined
+        if (state === 'final' && message?.role === 'assistant') {
+          // Extract full text from content blocks
+          const fullText = message.content
+            ?.filter(b => b.type === 'text' && b.text)
+            .map(b => b.text)
+            .join('') || ''
+          if (fullText) {
+            console.log(`[OpenClaw] chat.final: "${fullText.slice(0, 100)}..." (${fullText.length} chars)`)
+            this.handlers.forEach(h => h({
+              type: 'message',
+              payload: {
+                role: 'agent',
+                content: fullText,
+                channel: 'home',
+                streaming: false,
+              },
+            }))
+          }
         }
         break
       }
