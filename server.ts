@@ -50,7 +50,7 @@ app.prepare().then(() => {
         io.emit('task:update', data.payload)
         break
       case 'message': {
-        const msg = data.payload as { role: string; content: string; channel?: string; conversation_id?: string; streaming?: boolean }
+        const msg = data.payload as { role: string; content: string; channel?: string; conversation_id?: string; streaming?: boolean; sessionKey?: string }
         // Persist non-streaming agent messages to the database
         if (msg.role === 'agent' && msg.content && !msg.streaming) {
           try {
@@ -62,12 +62,13 @@ app.prepare().then(() => {
             console.error('[DB] Failed to save agent message:', err)
           }
 
-          // Auto-reply via SMS if there's a pending reply (only on complete/final messages)
-          if (pendingSmsReplies.size > 0) {
+          // Auto-reply via SMS — ONLY from the 'main' session (where SMS messages are sent)
+          // Ignore responses from other sessions (webchat 'agent:main:main', 'home', etc.)
+          if (pendingSmsReplies.size > 0 && msg.sessionKey === 'main') {
             const [key, pending] = pendingSmsReplies.entries().next().value as [string, { phoneNumber: string; contactId: string; timestamp: number }]
             if (Date.now() - pending.timestamp < 5 * 60 * 1000) {
               pendingSmsReplies.delete(key)
-              console.log(`[SMS] Got complete agent response (${msg.content.length} chars), sending to ${pending.phoneNumber}`)
+              console.log(`[SMS] Got response from 'main' session (${msg.content.length} chars), sending to ${pending.phoneNumber}`)
               try {
                 const smsReplyId = require('crypto').randomBytes(8).toString('hex')
                 db.prepare(

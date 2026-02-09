@@ -193,6 +193,7 @@ export class OpenClawClient {
       case 'chat': {
         // Chat event: { state: 'delta'|'final', message: { role, content: [{type:'text', text:'...'}] }, sessionKey }
         const state = payload.state as string | undefined
+        const sessionKey = payload.sessionKey as string | undefined
         const message = payload.message as { role?: string; content?: Array<{ type: string; text?: string }> } | undefined
         if (state === 'final' && message?.role === 'assistant') {
           // Extract full text from content blocks
@@ -201,7 +202,7 @@ export class OpenClawClient {
             .map(b => b.text)
             .join('') || ''
           if (fullText) {
-            console.log(`[OpenClaw] chat.final: "${fullText.slice(0, 100)}..." (${fullText.length} chars)`)
+            console.log(`[OpenClaw] chat.final [${sessionKey}]: "${fullText.slice(0, 100)}..." (${fullText.length} chars)`)
             this.handlers.forEach(h => h({
               type: 'message',
               payload: {
@@ -209,6 +210,7 @@ export class OpenClawClient {
                 content: fullText,
                 channel: 'home',
                 streaming: false,
+                sessionKey,
               },
             }))
           }
