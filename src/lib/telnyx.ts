@@ -3,6 +3,8 @@ import { getDb } from './db'
 const TELNYX_API_BASE = 'https://api.telnyx.com/v2'
 
 function getApiKey(): string {
+  // Env var takes priority, then DB setting
+  if (process.env.TELNYX_API_KEY) return process.env.TELNYX_API_KEY
   const db = getDb()
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('telnyx_api_key') as { value: string } | undefined
   return row?.value || ''
@@ -69,7 +71,7 @@ export async function hangupCall(callControlId: string) {
 
 export async function sendSms(to: string, text: string) {
   const db = getDb()
-  const from = (db.prepare('SELECT value FROM settings WHERE key = ?').get('telnyx_phone_number') as { value: string } | undefined)?.value
+  const from = process.env.TELNYX_PHONE_NUMBER || (db.prepare('SELECT value FROM settings WHERE key = ?').get('telnyx_phone_number') as { value: string } | undefined)?.value
   if (!from) throw new Error('Telnyx phone number not configured')
 
   return telnyxRequest('/messages', {
