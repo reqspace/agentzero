@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useEffect, useState, useCallback } from 'react'
 import { useSocket } from '@/hooks/use-socket'
+import { UserButton } from '@clerk/nextjs'
 
 const navItems = [
   {
@@ -273,7 +274,7 @@ export function Sidebar() {
         </div>
 
         {/* Agent status */}
-        <div className="mb-4 flex flex-col items-center gap-3">
+        <div className="mb-2 flex flex-col items-center gap-3">
           <button
             className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-bg-3 transition-colors cursor-pointer"
             title={agentOnline ? 'Agent Online — Click to stop' : 'Agent Offline — Click to start'}
@@ -283,6 +284,11 @@ export function Sidebar() {
               ${agentOnline ? 'bg-teal status-pulse text-teal' : 'bg-error text-error'}
             `} />
           </button>
+        </div>
+
+        {/* User account */}
+        <div className="mb-4">
+          <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: 'w-8 h-8' } }} />
         </div>
       </aside>
 

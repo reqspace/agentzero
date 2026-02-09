@@ -1,6 +1,7 @@
 import { createServer } from 'http'
 import next from 'next'
 import { Server as SocketServer } from 'socket.io'
+import { verifyToken } from '@clerk/backend'
 import { getDb } from './src/lib/db'
 import { OpenClawClient } from './src/lib/openclaw-client'
 
@@ -145,6 +146,33 @@ app.prepare().then(() => {
 
   // Attempt gateway connection (won't crash if unavailable)
   clawClient.connect()
+
+  // Socket.IO auth middleware — verify Clerk session token
+  io.use(async (socket, next) => {
+    const token = socket.handshake.auth?.token as string | undefined
+    if (!token) {
+      return next(new Error('Authentication required'))
+    }
+    try {
+      const secretKey = process.env.CLERK_SECRET_KEY
+      if (!secretKey) {
+        console.error('[Socket.IO] CLERK_SECRET_KEY not set')
+        return next(new Error('Server auth not configured'))
+      }
+      const result = await verifyToken(token, { secretKey })
+      if (result.errors) {
+        console.warn('[Socket.IO] Invalid token:', result.errors)
+        return next(new Error('Invalid session'))
+      }
+      const payload = result.data as { sub: string }
+      // Attach user info to socket for potential later use
+      socket.data.userId = payload.sub
+      next()
+    } catch (err) {
+      console.warn('[Socket.IO] Token verification failed:', err)
+      return next(new Error('Invalid session'))
+    }
+  })
 
   // Socket.IO connection handling
   io.on('connection', (socket) => {
