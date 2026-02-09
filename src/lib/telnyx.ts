@@ -74,10 +74,17 @@ export async function sendSms(to: string, text: string) {
   const from = process.env.TELNYX_PHONE_NUMBER || process.env.TELNYX_FROM_NUMBER || (db.prepare('SELECT value FROM settings WHERE key = ?').get('telnyx_phone_number') as { value: string } | undefined)?.value
   if (!from) throw new Error('Telnyx phone number not configured. Set TELNYX_PHONE_NUMBER env var on Railway (e.g. +15122546553)')
 
+  // Telnyx max is 10 SMS parts (~1600 chars). Truncate to stay within limits.
+  const MAX_SMS_CHARS = 1500
+  let smsText = text
+  if (smsText.length > MAX_SMS_CHARS) {
+    smsText = smsText.slice(0, MAX_SMS_CHARS - 3) + '...'
+  }
+
   return telnyxRequest('/messages', {
     from,
     to,
-    text,
+    text: smsText,
     type: 'SMS',
   })
 }
