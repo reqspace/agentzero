@@ -91,11 +91,44 @@ app.prepare().then(() => {
         io.emit('message', data.payload)
         break
       }
+      case 'agent_lifecycle': {
+        const lc = data.payload as { runId: string; phase: string }
+        if (lc.phase === 'end' || lc.phase === 'error') {
+          const taskId = runTaskMap.get(lc.runId)
+          if (taskId) {
+            const newStatus = lc.phase === 'error' ? 'failed' : 'done'
+            try {
+              db.prepare('UPDATE tasks SET status = ?, updated_at = CURRENT_TIMESTAMP, completed_at = CURRENT_TIMESTAMP WHERE id = ?')
+                .run(newStatus, taskId)
+              io.emit('task:update', { taskId, status: newStatus })
+              console.log(`[Tasks] Run ${lc.runId} ${lc.phase} → task ${taskId} → ${newStatus}`)
+            } catch (err) {
+              console.error('[Tasks] Failed to update task:', err)
+            }
+            runTaskMap.delete(lc.runId)
+          }
+        }
+        break
+      }
+      case 'agent_tool': {
+        const tool = data.payload as { runId: string; name?: string }
+        const taskId = runTaskMap.get(tool.runId)
+        if (taskId && tool.name) {
+          try {
+            db.prepare('UPDATE tasks SET description = COALESCE(description, \'\') || ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+              .run(`\n- ${tool.name}`, taskId)
+          } catch { /* best effort */ }
+        }
+        break
+      }
       case 'status':
         io.emit('agent:status', data.payload)
         break
     }
   })
+
+  // Track OpenClaw runId → dashboard taskId for auto-updating tasks
+  const runTaskMap = new Map<string, string>()
 
   // Pending SMS replies: tracks phone numbers waiting for agent responses
   const pendingSmsReplies = new Map<string, { phoneNumber: string; contactId: string; timestamp: number }>()
@@ -153,9 +186,22 @@ app.prepare().then(() => {
         console.error('[Socket.IO] Failed to save user message:', err)
       }
 
-      // Forward to OpenClaw gateway
+      // Forward to OpenClaw gateway and create a task to track it
       if (clawClient.authenticated) {
-        clawClient.sendCommand(text, 'main')
+        const runId = clawClient.sendCommand(text, 'main')
+        if (runId) {
+          try {
+            const taskId = require('crypto').randomBytes(8).toString('hex')
+            db.prepare(
+              'INSERT INTO tasks (id, title, status, priority) VALUES (?, ?, ?, ?)'
+            ).run(taskId, text.slice(0, 100), 'running', 'med')
+            runTaskMap.set(runId, taskId)
+            io.emit('task:update', { taskId, status: 'running' })
+            console.log(`[Tasks] Created task ${taskId} for run ${runId}: "${text.slice(0, 60)}"`)
+          } catch (err) {
+            console.error('[Tasks] Failed to create task:', err)
+          }
+        }
         console.log(`[Socket.IO] Forwarded to OpenClaw: "${text.slice(0, 80)}"`)
       } else {
         console.warn(`[Socket.IO] OpenClaw not authenticated, message not forwarded: "${text.slice(0, 60)}"`)

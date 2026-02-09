@@ -167,9 +167,10 @@ export class OpenClawClient {
       }
 
       case 'agent': {
-        // Agent event payload: { stream, data: { text }, runId, ... }
-        const data = payload.data as { text?: string; phase?: string } | undefined
+        // Agent event payload: { stream, data: { text, phase, name }, runId, seq, ... }
+        const data = payload.data as { text?: string; phase?: string; name?: string } | undefined
         const stream = payload.stream as string | undefined
+        const runId = payload.runId as string | undefined
         const textContent = data?.text || ''
         if (stream === 'assistant' && textContent) {
           this.handlers.forEach(h => h({
@@ -180,6 +181,20 @@ export class OpenClawClient {
               channel: 'home',
               streaming: true,
             },
+          }))
+        }
+        // Lifecycle events: agent run start/end/error
+        if (stream === 'lifecycle' && data?.phase && runId) {
+          this.handlers.forEach(h => h({
+            type: 'agent_lifecycle',
+            payload: { runId, phase: data.phase, error: data.phase === 'error' ? data : undefined },
+          }))
+        }
+        // Tool events: agent is using a tool
+        if (stream === 'tool' && runId) {
+          this.handlers.forEach(h => h({
+            type: 'agent_tool',
+            payload: { runId, name: data?.name },
           }))
         }
         // Track token usage from agent events
@@ -292,7 +307,7 @@ export class OpenClawClient {
 
   // --- Commands ---
 
-  sendCommand(text: string, channel?: string): void {
+  sendCommand(text: string, channel?: string): string | null {
     // Cost guard check
     if (this.isCostLimitReached()) {
       this.handlers.forEach(h => h({
@@ -303,19 +318,20 @@ export class OpenClawClient {
           channel: channel || 'home',
         },
       }))
-      return
+      return null
     }
 
     if (!this.authenticated) {
       console.warn(`[OpenClaw] sendCommand dropped — not authenticated. text="${text.slice(0, 60)}"`)
-      return
+      return null
     }
     if (this.ws?.readyState !== WebSocket.OPEN) {
       console.warn(`[OpenClaw] sendCommand dropped — ws not open (state=${this.ws?.readyState}). text="${text.slice(0, 60)}"`)
-      return
+      return null
     }
 
     const reqId = this.nextId()
+    const runId = crypto.randomUUID()
     const payload = {
       type: 'req',
       id: reqId,
@@ -324,16 +340,18 @@ export class OpenClawClient {
         message: text,
         sessionKey: channel || 'main',
         deliver: false,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: runId,
       },
     }
 
     try {
-      console.log(`[OpenClaw] sendCommand id=${reqId} sessionKey="${channel || 'main'}" text="${text.slice(0, 80)}"`)
+      console.log(`[OpenClaw] sendCommand id=${reqId} runId=${runId} sessionKey="${channel || 'main'}" text="${text.slice(0, 80)}"`)
       this.send(payload)
       console.log(`[OpenClaw] sendCommand id=${reqId} sent OK`)
+      return runId
     } catch (err) {
       console.error(`[OpenClaw] sendCommand id=${reqId} FAILED:`, err)
+      return null
     }
   }
 
